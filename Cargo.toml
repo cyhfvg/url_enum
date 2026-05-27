@@ -2,6 +2,8 @@
 name = "url_enum"
 version = "0.1.0"
 edition = "2024"
+description = "A command-line tool for discovering URL paths or substituting values into URL templates from a wordlist"
+license = "BSD-3-Clause"
 
 [dependencies]
 anyhow = "1.0"
