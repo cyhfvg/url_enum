@@ -36,6 +36,10 @@ pub struct Args {
     #[arg(long = "concurrency", default_value_t = 50)]
     pub concurrency: usize,
 
+    /// Add deterministic per-request jitter before sending, from 0 up to this many milliseconds
+    #[arg(long = "request-jitter-ms", default_value_t = 0)]
+    pub request_jitter_ms: u64,
+
     /// Request timeout in seconds
     #[arg(long = "timeout", default_value_t = 10)]
     pub timeout: u64,

@@ -16,7 +16,7 @@ target at a time and produces results that are easy to filter or save.
   request locations.
 - Send `GET` or `HEAD` requests with custom headers, proxy settings, and
   configurable timeouts.
-- Control concurrency and optionally follow redirects.
+- Control concurrency, add request jitter, and optionally follow redirects.
 - Generate extension variants and filter results by status code or response
   size.
 - Write scan results as CSV or JSON Lines.
@@ -82,6 +82,21 @@ url_enum -t https://example.com/base -d paths.txt --concurrency 100
 
 With entries such as `admin` and `api/v1`, this probes URLs under
 `https://example.com/base/`.
+
+### Reduce request bursts
+
+Add deterministic request jitter to spread request start times while preserving
+the selected concurrency limit:
+
+```bash
+url_enum -t https://example.com -d paths.txt \
+  --concurrency 20 \
+  --request-jitter-ms 250
+```
+
+Each HTTP request waits between `0` and the configured number of milliseconds
+before it is sent. This helps reduce short bursts, but it does not replace
+authorization, conservative concurrency, or an agreed testing window.
 
 ### Replace a placeholder
 
@@ -156,6 +171,7 @@ Standard input must provide one target URL.
 | `-d, --dict <DICT>` | Wordlist file with one entry per line. | Required |
 | `-r, --replace <TOKEN>` | Replace `TOKEN` wherever it occurs in URLs, header names, or header values. | Append paths |
 | `--concurrency <N>` | Maximum number of concurrent requests. | `50` |
+| `--request-jitter-ms <MS>` | Add deterministic per-request jitter before sending. | `0` |
 | `--timeout <SECONDS>` | Request timeout in seconds. | `10` |
 | `--method <get\|head>` | HTTP method. | `get` |
 | `--user-agent <VALUE>` | User-Agent value. | Browser-style value |
@@ -171,6 +187,16 @@ Standard input must provide one target URL.
 | `--format <csv\|jsonl>` | Output format. | `csv` |
 
 Run `url_enum --help` for the command-line help available in your build.
+
+## Benchmarks
+
+The repository includes a repeatable local benchmark that compares throughput
+across concurrency values and CSV/JSONL output formats. It uses a loopback HTTP
+server and does not contact external targets:
+
+```bash
+cargo bench --bench throughput
+```
 
 ## Output
 
@@ -190,7 +216,8 @@ Both CSV and JSON Lines outputs contain these fields:
 - Authorization is required: scan only systems that you own or are explicitly
   authorized to test.
 - Begin with a conservative `--concurrency` value and follow the agreed test
-  boundaries.
+  boundaries. Use `--request-jitter-ms` when you need to reduce short request
+  bursts.
 - Invalid HTTPS certificates are accepted by default. Use `--insecure false`
   when certificate validation is required.
 - Treat output files and wordlists as potentially sensitive data.

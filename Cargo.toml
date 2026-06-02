@@ -18,6 +18,14 @@ same-file = "1.0"
 tokio = { version = "1.45", features = ["fs", "io-util", "io-std", "macros", "rt-multi-thread"] }
 url = "2.5"
 
+[dev-dependencies]
+criterion = "0.7"
+tempfile = "3.20"
+
+[[bench]]
+name = "throughput"
+harness = false
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

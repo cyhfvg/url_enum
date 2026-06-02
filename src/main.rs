@@ -1,12 +1,9 @@
-mod cli;
-mod scanner;
-
 use anyhow::Result;
 use clap::Parser;
 
-use crate::cli::Args;
+use url_enum::cli::Args;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    scanner::run(Args::parse()).await
+    url_enum::scanner::run(Args::parse()).await
 }
