@@ -1,3 +1,0 @@
-[submodule ".agents/skills/rust-skills"]
-	path = .agents/skills/rust-skills
-	url = https://github.com/cyhfvg/url_enum.git
