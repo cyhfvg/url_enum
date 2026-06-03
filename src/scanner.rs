@@ -11,8 +11,8 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::{
     Client, Method, Proxy, RequestBuilder, Response, StatusCode,
     header::{
-        AUTHORIZATION, COOKIE, HeaderName, HeaderValue, LOCATION, PROXY_AUTHORIZATION,
-        WWW_AUTHENTICATE,
+        AUTHORIZATION, CONTENT_LENGTH, COOKIE, HeaderName, HeaderValue, LOCATION,
+        PROXY_AUTHORIZATION, WWW_AUTHENTICATE,
     },
     redirect::Policy,
 };
@@ -673,7 +673,11 @@ async fn response_result(
     }
 
     let size = if *method == Method::HEAD {
-        response.content_length()
+        response
+            .headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
     } else {
         let mut bytes = response.bytes_stream();
         let mut total = 0_u64;

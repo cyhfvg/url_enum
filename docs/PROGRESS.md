@@ -1,6 +1,6 @@
 # url_enum 开发进度
 
-最后更新：2026-06-02
+最后更新：2026-06-03
 
 ## 项目目标
 
@@ -112,6 +112,13 @@ cargo build --release
 - `--black-size` 的单值列表与闭区间均会屏蔽命中的实际响应大小。
 - HTTP 与 SOCKS5H 代理可通过代理 URL 用户信息发送认证。
 - SOCKS5H 代理可完成用户名/密码认证，并由代理侧接收待解析目标域名。
+
+新增自动化集成测试使用本地 HTTP 服务覆盖：
+
+- 状态码 allowlist 与 blocklist 组合过滤。
+- `--black-size` 单值与闭区间过滤。
+- 单请求超时会记录为失败探测结果。
+- `--method head` 会发送 HEAD 请求，并使用 `Content-Length` 作为大小。
 
 ## 当前代码结构
 
