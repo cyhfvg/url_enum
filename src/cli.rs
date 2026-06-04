@@ -16,11 +16,11 @@ pub enum OutputFormat {
 #[command(
     name = "url_enum",
     version,
-    about = "Enumerate paths for a single target URL (authorized targets only)",
-    long_about = "Enumerate paths for a single target URL.\n\nSecurity notice: Run this tool only against systems you own or are explicitly authorized to test."
+    about = "Enumerate paths for target URLs (authorized targets only)",
+    long_about = "Enumerate paths for target URLs.\n\nSecurity notice: Run this tool only against systems you own or are explicitly authorized to test."
 )]
 pub struct Args {
-    /// Target URL; provide one URL or `-` to read from stdin
+    /// Target URL, target-list file, or `-` to read one URL from stdin
     #[arg(short = 't', long = "target")]
     pub target: String,
 
@@ -39,6 +39,10 @@ pub struct Args {
     /// Add deterministic per-request jitter before sending, from 0 up to this many milliseconds
     #[arg(long = "request-jitter-ms", default_value_t = 0)]
     pub request_jitter_ms: u64,
+
+    /// Shuffle the fully expanded target and wordlist request sequence
+    #[arg(long = "random-sequence", default_value_t = false, action = ArgAction::SetTrue)]
+    pub random_sequence: bool,
 
     /// Request timeout in seconds
     #[arg(long = "timeout", default_value_t = 10)]

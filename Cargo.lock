@@ -1509,6 +1509,7 @@ dependencies = [
  "criterion",
  "csv",
  "futures",
+ "rand",
  "reqwest",
  "same-file",
  "serde",

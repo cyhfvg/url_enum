@@ -76,6 +76,7 @@ impl Drop for LocalHttpServer {
 #[derive(Debug, Deserialize)]
 struct TestResult {
     word: String,
+    url: String,
     status: Option<u16>,
     size: Option<u64>,
     error: Option<String>,
@@ -188,6 +189,7 @@ fn args_for(
         replace: None,
         concurrency: 4,
         request_jitter_ms: 0,
+        random_sequence: false,
         timeout,
         method,
         user_agent: "url_enum-integration-test".to_owned(),
@@ -239,6 +241,93 @@ fn result_for<'a>(results: &'a [TestResult], word: &str) -> &'a TestResult {
         .iter()
         .find(|result| result.word == word)
         .unwrap_or_else(|| panic!("missing result for word `{word}`"))
+}
+
+#[test]
+fn scans_each_target_from_an_existing_target_list_file() {
+    let server = LocalHttpServer::start();
+    let temp = TempDir::new().expect("create temporary directory");
+    let targets = temp.path().join("targets.txt");
+    let dictionary = temp.path().join("dict.txt");
+    let output = temp.path().join("results.jsonl");
+    let first = format!("{}/first", server.target());
+    let second = format!("{}/second", server.target());
+
+    std::fs::write(&targets, format!("{first}\n\n{second}\n")).expect("write target list");
+    std::fs::write(&dictionary, "admin\nlogin\n").expect("write dictionary");
+
+    let mut args = args_for(
+        targets.display().to_string(),
+        &dictionary,
+        &output,
+        HttpMethod::Get,
+        10,
+    );
+    args.concurrency = 1;
+
+    let runtime = tokio::runtime::Runtime::new().expect("create Tokio runtime");
+    runtime
+        .block_on(url_enum::scanner::run(args))
+        .expect("run scanner");
+
+    let urls: Vec<String> = read_results(&output)
+        .into_iter()
+        .map(|result| result.url)
+        .collect();
+
+    assert_eq!(
+        urls,
+        vec![
+            format!("{first}/admin"),
+            format!("{first}/login"),
+            format!("{second}/admin"),
+            format!("{second}/login"),
+        ]
+    );
+}
+
+#[test]
+fn replaces_token_inside_targets_from_a_target_list_file() {
+    let server = LocalHttpServer::start();
+    let temp = TempDir::new().expect("create temporary directory");
+    let targets = temp.path().join("targets.txt");
+    let dictionary = temp.path().join("dict.txt");
+    let output = temp.path().join("results.jsonl");
+    let first = format!("{}/ENUM", server.target());
+    let second = format!("{}/root/ENUM", server.target());
+
+    std::fs::write(&targets, format!("{first}\n{second}\n")).expect("write target list");
+    std::fs::write(&dictionary, "admin\nlogin\n").expect("write dictionary");
+
+    let mut args = args_for(
+        targets.display().to_string(),
+        &dictionary,
+        &output,
+        HttpMethod::Get,
+        10,
+    );
+    args.concurrency = 1;
+    args.replace = Some("ENUM".to_owned());
+
+    let runtime = tokio::runtime::Runtime::new().expect("create Tokio runtime");
+    runtime
+        .block_on(url_enum::scanner::run(args))
+        .expect("run scanner");
+
+    let urls: Vec<String> = read_results(&output)
+        .into_iter()
+        .map(|result| result.url)
+        .collect();
+
+    assert_eq!(
+        urls,
+        vec![
+            format!("{}/admin", server.target()),
+            format!("{}/login", server.target()),
+            format!("{}/root/admin", server.target()),
+            format!("{}/root/login", server.target()),
+        ]
+    );
 }
 
 #[test]

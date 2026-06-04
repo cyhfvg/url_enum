@@ -18,6 +18,21 @@ fn parses_request_jitter_milliseconds() {
 }
 
 #[test]
+fn parses_random_sequence_flag() {
+    let args = Args::try_parse_from([
+        "url_enum",
+        "-t",
+        "https://example.test",
+        "-d",
+        "dict.txt",
+        "--random-sequence",
+    ])
+    .expect("valid random sequence arguments");
+
+    assert!(args.random_sequence);
+}
+
+#[test]
 fn rejects_removed_proxy_short_and_credentials_options() {
     let short_proxy = Args::try_parse_from([
         "url_enum",

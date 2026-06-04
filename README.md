@@ -7,16 +7,18 @@
 > and disruptive.
 
 `url_enum` is a command-line tool for discovering URL paths or substituting
-values into a URL template from a wordlist. It is designed for a single web
-target at a time and produces results that are easy to filter or save.
+values into URL templates from a wordlist. It accepts one web target or a
+target-list file and produces results that are easy to filter or save.
 
 ## Features
 
 - Append wordlist entries to a target URL or replace a token in supported
   request locations.
+- Read an existing target-list file with one target URL per line.
 - Send `GET` or `HEAD` requests with custom headers, proxy settings, and
   configurable timeouts.
 - Control concurrency, add request jitter, and optionally follow redirects.
+- Randomize the fully expanded target and wordlist request sequence.
 - Generate extension variants and filter results by status code or response
   size.
 - Write scan results as CSV or JSON Lines.
@@ -82,6 +84,34 @@ url_enum -t https://example.com/base -d paths.txt --concurrency 100
 
 With entries such as `admin` and `api/v1`, this probes URLs under
 `https://example.com/base/`.
+
+### Scan a target list
+
+When the value passed to `-t/--target` names an existing file, it is read as a
+target list with one target URL per line:
+
+```text
+https://one.example.com
+https://two.example.com/base
+```
+
+```bash
+url_enum -t targets.txt -d paths.txt --concurrency 50
+```
+
+By default, requests are generated in target-major order: every wordlist entry
+for the first target, then every wordlist entry for the next target.
+
+### Randomize request order
+
+Use `--random-sequence` to shuffle the complete target and wordlist product:
+
+```bash
+url_enum -t targets.txt -d paths.txt --random-sequence
+```
+
+For two targets and three wordlist entries, the shuffled sequence is drawn from
+all six pairs, not just from a shuffled target list.
 
 ### Reduce request bursts
 
@@ -167,11 +197,12 @@ Standard input must provide one target URL.
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `-t, --target <TARGET>` | Target URL, or `-` to read one URL from standard input. | Required |
+| `-t, --target <TARGET>` | Target URL, existing target-list file, or `-` to read one URL from standard input. | Required |
 | `-d, --dict <DICT>` | Wordlist file with one entry per line. | Required |
 | `-r, --replace <TOKEN>` | Replace `TOKEN` wherever it occurs in URLs, header names, or header values. | Append paths |
 | `--concurrency <N>` | Maximum number of concurrent requests. | `50` |
 | `--request-jitter-ms <MS>` | Add deterministic per-request jitter before sending. | `0` |
+| `--random-sequence` | Shuffle the fully expanded target and wordlist request sequence. | Disabled |
 | `--timeout <SECONDS>` | Request timeout in seconds. | `10` |
 | `--method <get\|head>` | HTTP method. | `get` |
 | `--user-agent <VALUE>` | User-Agent value. | Browser-style value |

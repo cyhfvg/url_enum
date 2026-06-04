@@ -6,13 +6,15 @@
 > 未经授权的扫描可能违法并影响目标系统运行。
 
 `url_enum` 是一个命令行工具，用于基于字典发现 URL 路径，或将字典值替换到
-URL 模板中。它每次面向一个 Web 目标运行，并输出便于过滤或保存的结果。
+URL 模板中。它支持单个 Web 目标或目标列表文件，并输出便于过滤或保存的结果。
 
 ## 功能概览
 
 - 将字典项追加到目标 URL，或替换受支持位置中的占位符。
+- 支持读取每行一个目标 URL 的目标列表文件。
 - 支持 `GET` 或 `HEAD` 请求、自定义请求头、代理和超时设置。
 - 支持控制并发数、添加请求抖动，并可选择跟随重定向。
+- 支持对完整展开后的目标与字典组合请求顺序进行随机化。
 - 支持生成扩展名变体，以及按状态码或响应大小过滤结果。
 - 支持以 CSV 或 JSON Lines 格式输出扫描结果。
 
@@ -76,6 +78,34 @@ url_enum -t https://example.com/base -d paths.txt --concurrency 100
 
 若字典中包含 `admin` 和 `api/v1`，工具会探测
 `https://example.com/base/` 下对应的 URL。
+
+### 扫描目标列表
+
+当传给 `-t/--target` 的值是一个已存在的文件名时，该文件会按目标列表读取，
+每行一个目标 URL：
+
+```text
+https://one.example.com
+https://two.example.com/base
+```
+
+```bash
+url_enum -t targets.txt -d paths.txt --concurrency 50
+```
+
+默认请求生成顺序为 target-major：先对第一个目标枚举所有字典项，再对下一个
+目标枚举所有字典项。
+
+### 随机化请求顺序
+
+使用 `--random-sequence` 可随机打乱完整展开后的目标与字典组合：
+
+```bash
+url_enum -t targets.txt -d paths.txt --random-sequence
+```
+
+例如两个目标、三个字典项时，会在全部六个 `target:dict` 组合上随机，而不是
+只随机目标顺序。
 
 ### 降低请求突发
 
@@ -158,11 +188,12 @@ printf '%s\n' 'https://example.com' | url_enum -t - -d paths.txt
 
 | 参数 | 说明 | 默认值 |
 | --- | --- | --- |
-| `-t, --target <TARGET>` | 目标 URL，或使用 `-` 从标准输入读取一条 URL。 | 必填 |
+| `-t, --target <TARGET>` | 目标 URL、已存在的目标列表文件，或使用 `-` 从标准输入读取一条 URL。 | 必填 |
 | `-d, --dict <DICT>` | 每行一个条目的字典文件。 | 必填 |
 | `-r, --replace <TOKEN>` | 替换 URL、header name 或 header value 中出现的 `TOKEN`。 | 追加路径 |
 | `--concurrency <N>` | 最大并发请求数。 | `50` |
 | `--request-jitter-ms <MS>` | 发送前添加确定性的单请求抖动。 | `0` |
+| `--random-sequence` | 随机打乱完整展开后的目标与字典组合请求顺序。 | 禁用 |
 | `--timeout <SECONDS>` | 单请求超时时间，单位为秒。 | `10` |
 | `--method <get\|head>` | HTTP 请求方法。 | `get` |
 | `--user-agent <VALUE>` | User-Agent 值。 | 浏览器风格值 |

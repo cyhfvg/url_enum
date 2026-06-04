@@ -127,6 +127,7 @@ fn benchmark_args(
         replace: None,
         concurrency,
         request_jitter_ms: 0,
+        random_sequence: false,
         timeout: 10,
         method: HttpMethod::Get,
         user_agent: "url_enum-benchmark".to_owned(),
