@@ -109,7 +109,9 @@ url_enum -t targets.txt -d paths.txt --random-sequence
 
 ### 降低请求突发
 
-可以添加确定性的请求抖动，在保留并发上限的同时分散请求发起时间：
+默认情况下，每个请求都会获得 `0` 到 `100` 毫秒之间的确定性抖动，以降低
+误操作造成的请求突发。也可以提高抖动上限，在保留并发上限的同时进一步分散
+请求发起时间：
 
 ```bash
 url_enum -t https://example.com -d paths.txt \
@@ -119,6 +121,8 @@ url_enum -t https://example.com -d paths.txt \
 
 每个 HTTP 请求发送前会等待 `0` 到指定毫秒数之间的时间。它有助于降低短时
 突发压力，但不能替代授权、保守的并发设置和约定好的测试窗口。
+
+如果在受控环境中确实需要禁用这个保护，请显式传入 `--request-jitter-ms 0`。
 
 ### 替换占位符
 
@@ -192,7 +196,7 @@ printf '%s\n' 'https://example.com' | url_enum -t - -d paths.txt
 | `-d, --dict <DICT>` | 每行一个条目的字典文件。 | 必填 |
 | `-r, --replace <TOKEN>` | 替换 URL、header name 或 header value 中出现的 `TOKEN`。 | 追加路径 |
 | `--concurrency <N>` | 最大并发请求数。 | `50` |
-| `--request-jitter-ms <MS>` | 发送前添加确定性的单请求抖动。 | `0` |
+| `--request-jitter-ms <MS>` | 发送前添加确定性的单请求抖动；显式传入 `0` 可禁用。 | `100` |
 | `--random-sequence` | 随机打乱完整展开后的目标与字典组合请求顺序。 | 禁用 |
 | `--timeout <SECONDS>` | 单请求超时时间，单位为秒。 | `10` |
 | `--method <get\|head>` | HTTP 请求方法。 | `get` |
@@ -235,8 +239,9 @@ CSV 与 JSON Lines 输出均包含以下字段：
 ## 安全提示
 
 - 必须获得授权：仅扫描您拥有或已获得明确测试授权的系统。
-- 使用较为保守的 `--concurrency` 值开始测试，并遵守约定的测试边界；需要降低
-  短时请求突发时可使用 `--request-jitter-ms`。
+- 使用较为保守的 `--concurrency` 值开始测试，并遵守约定的测试边界；默认的
+  `--request-jitter-ms 100` 有助于降低误操作造成的短时请求突发，仅在确实需要
+  零时延时才传入 `--request-jitter-ms 0`。
 - 默认允许无效 HTTPS 证书；需要验证证书时请使用 `--insecure false`。
 - 请将输出文件和字典视为可能包含敏感信息的数据。
 

@@ -18,7 +18,7 @@
 - `-t, --target` 接受一条目标 URL、已存在的目标列表文件，或使用 `-` 从标准输入读取唯一目标。
 - `-d, --dict` 接受按行组织的路径或替换值字典。
 - `-r, --replace <TOKEN>` 启用 URL 与 HTTP Header 的模板替换模式；占位符仅出现在 Header 中时保持目标 URL 不变。
-- `--concurrency`、`--request-jitter-ms`、`--timeout`、`--method get|head` 控制请求行为。
+- `--concurrency`、默认 `100ms` 的 `--request-jitter-ms`、`--timeout`、`--method get|head` 控制请求行为。
 - `--random-sequence` 随机打乱完整展开后的 `target × dict` 请求组合顺序，而不是只随机目标顺序。
 - `--user-agent`、`--insecure` 控制 HTTP 客户端；`--follow-redirect true` 跟随并记录跳转链。
 - `-H, --header 'Name: value'` 按参数顺序添加自定义 HTTP Header，支持重复同名值，也可通过 `-H 'Cookie: name=value'` 提供 Cookie。
@@ -102,7 +102,7 @@ cargo build --release
 - 使用 `--replace ENUM` 时以同一候选同步替换 URL、HTTP Header 名称和值中的占位符，并支持固定 URL 的 Header-only 替换。
 - 跨目标跳转时省略包含 `Cookie` 在内的敏感自定义 Header。
 - 解析并合并 `--black-size` 的单值、列表和闭区间表达式，并拒绝反向区间。
-- 解析 `--request-jitter-ms` 并验证请求抖动延迟确定且不超过配置上限。
+- 解析 `--request-jitter-ms`，默认启用 `100ms` 请求抖动，并验证请求抖动延迟确定且不超过配置上限。
 - 解析 `--random-sequence`。
 - 解析目标列表内容并忽略空行。
 - 默认多目标候选流按 target-major 顺序生成。

@@ -79,8 +79,8 @@ pub struct Args {
     #[arg(long = "concurrency", default_value_t = 50)]
     pub concurrency: usize,
 
-    /// Add deterministic per-request jitter before sending, from 0 up to this many milliseconds
-    #[arg(long = "request-jitter-ms", default_value_t = 0)]
+    /// Add deterministic per-request jitter before sending; pass 0 explicitly to disable
+    #[arg(long = "request-jitter-ms", default_value_t = 100)]
     pub request_jitter_ms: u64,
 
     /// Shuffle the fully expanded target and wordlist request sequence

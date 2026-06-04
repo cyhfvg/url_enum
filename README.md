@@ -115,8 +115,9 @@ all six pairs, not just from a shuffled target list.
 
 ### Reduce request bursts
 
-Add deterministic request jitter to spread request start times while preserving
-the selected concurrency limit:
+By default, each request gets deterministic jitter from `0` to `100`
+milliseconds to reduce accidental request bursts. Increase the bound to spread
+request start times further while preserving the selected concurrency limit:
 
 ```bash
 url_enum -t https://example.com -d paths.txt \
@@ -127,6 +128,9 @@ url_enum -t https://example.com -d paths.txt \
 Each HTTP request waits between `0` and the configured number of milliseconds
 before it is sent. This helps reduce short bursts, but it does not replace
 authorization, conservative concurrency, or an agreed testing window.
+
+To intentionally disable this guard in a controlled environment, pass
+`--request-jitter-ms 0` explicitly.
 
 ### Replace a placeholder
 
@@ -201,7 +205,7 @@ Standard input must provide one target URL.
 | `-d, --dict <DICT>` | Wordlist file with one entry per line. | Required |
 | `-r, --replace <TOKEN>` | Replace `TOKEN` wherever it occurs in URLs, header names, or header values. | Append paths |
 | `--concurrency <N>` | Maximum number of concurrent requests. | `50` |
-| `--request-jitter-ms <MS>` | Add deterministic per-request jitter before sending. | `0` |
+| `--request-jitter-ms <MS>` | Add deterministic per-request jitter before sending; pass `0` explicitly to disable. | `100` |
 | `--random-sequence` | Shuffle the fully expanded target and wordlist request sequence. | Disabled |
 | `--timeout <SECONDS>` | Request timeout in seconds. | `10` |
 | `--method <get\|head>` | HTTP method. | `get` |
@@ -247,8 +251,8 @@ Both CSV and JSON Lines outputs contain these fields:
 - Authorization is required: scan only systems that you own or are explicitly
   authorized to test.
 - Begin with a conservative `--concurrency` value and follow the agreed test
-  boundaries. Use `--request-jitter-ms` when you need to reduce short request
-  bursts.
+  boundaries. The default `--request-jitter-ms 100` helps reduce accidental
+  short bursts; pass `--request-jitter-ms 0` only when zero delay is intentional.
 - Invalid HTTPS certificates are accepted by default. Use `--insecure false`
   when certificate validation is required.
 - Treat output files and wordlists as potentially sensitive data.
