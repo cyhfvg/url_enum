@@ -13,6 +13,21 @@ enum RequestHeaderName {
 }
 
 impl RequestHeaderName {
+    /// Signature: `fn render(&self, word) -> Result<HeaderName>`
+    ///
+    /// Purpose: Renders a stored header-name template for one dictionary word.
+    ///
+    /// Parameters:
+    /// - `word`: Candidate word used when the name contains the replacement
+    ///   token.
+    ///
+    /// Returns: A valid reqwest [`HeaderName`].
+    ///
+    /// Errors: Returns an error if token replacement produces an invalid HTTP
+    /// header name.
+    ///
+    /// Notes: Literal names are parsed once during configuration and cloned per
+    /// request.
     fn render(&self, word: &str) -> Result<HeaderName> {
         match self {
             Self::Literal(name) => Ok(name.clone()),
@@ -33,6 +48,21 @@ enum RequestHeaderValue {
 }
 
 impl RequestHeaderValue {
+    /// Signature: `fn render(&self, word) -> Result<HeaderValue>`
+    ///
+    /// Purpose: Renders a stored header-value template for one dictionary word.
+    ///
+    /// Parameters:
+    /// - `word`: Candidate word used when the value contains the replacement
+    ///   token.
+    ///
+    /// Returns: A valid reqwest [`HeaderValue`].
+    ///
+    /// Errors: Returns an error if token replacement produces an invalid HTTP
+    /// header value.
+    ///
+    /// Notes: Literal values are parsed once during configuration and cloned per
+    /// request.
     fn render(&self, word: &str) -> Result<HeaderValue> {
         match self {
             Self::Literal(value) => Ok(value.clone()),
@@ -57,6 +87,22 @@ pub(super) struct RequestHeaders {
 }
 
 impl RequestHeaders {
+    /// Signature: `fn parse(headers, replacement) -> Result<Self>`
+    ///
+    /// Purpose: Parses CLI header strings and records token-aware templates for
+    /// dynamic names or values.
+    ///
+    /// Parameters:
+    /// - `headers`: Raw `Name: value` header strings from CLI parsing.
+    /// - `replacement`: Optional token to substitute with each dictionary word.
+    ///
+    /// Returns: Parsed request headers plus a flag indicating whether any header
+    /// contains the replacement token.
+    ///
+    /// Errors: Returns an error for malformed header syntax, empty names, or
+    /// invalid literal header names and values.
+    ///
+    /// Notes: Repeated headers are preserved in input order.
     pub(super) fn parse(headers: &[String], replacement: Option<&str>) -> Result<Self> {
         let mut parsed = Vec::with_capacity(headers.len());
         let mut has_token = false;
@@ -101,10 +147,37 @@ impl RequestHeaders {
         })
     }
 
+    /// Signature: `fn has_token(&self) -> bool`
+    ///
+    /// Purpose: Reports whether any configured header depends on the replacement
+    /// token.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: `true` when a header name or value contains the token.
+    ///
+    /// Notes: URL generation uses this to permit header-only replacement mode.
     pub(super) fn has_token(&self) -> bool {
         self.has_token
     }
 
+    /// Signature: `fn apply(&self, request, include_sensitive, word) -> Result<RequestBuilder>`
+    ///
+    /// Purpose: Applies configured headers to a request builder for one
+    /// candidate word.
+    ///
+    /// Parameters:
+    /// - `request`: Request builder to decorate.
+    /// - `include_sensitive`: Whether sensitive headers may be attached.
+    /// - `word`: Candidate word used for token replacement.
+    ///
+    /// Returns: The updated reqwest [`RequestBuilder`].
+    ///
+    /// Errors: Returns an error if dynamic header rendering produces an invalid
+    /// name or value.
+    ///
+    /// Notes: Sensitive headers are omitted after cross-authority redirects to
+    /// avoid leaking credentials.
     pub(super) fn apply(
         &self,
         mut request: RequestBuilder,
@@ -125,6 +198,17 @@ impl RequestHeaders {
     }
 }
 
+/// Signature: `fn is_sensitive_redirect_header(name) -> bool`
+///
+/// Purpose: Identifies headers that should not be forwarded across authorities.
+///
+/// Parameters:
+/// - `name`: Header name to classify.
+///
+/// Returns: `true` for authentication or cookie-style headers.
+///
+/// Notes: Includes `Cookie2` case-insensitively for compatibility with older
+/// clients and servers.
 fn is_sensitive_redirect_header(name: &HeaderName) -> bool {
     name == AUTHORIZATION
         || name == COOKIE
@@ -139,6 +223,16 @@ mod tests {
 
     use super::*;
 
+    /// Signature: `fn parses_and_appends_repeated_headers_in_value_order()`
+    ///
+    /// Purpose: Verifies repeated headers preserve their configured order.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Also checks that literal authorization headers survive normal
+    /// same-authority requests.
     #[test]
     fn parses_and_appends_repeated_headers_in_value_order() {
         let headers = RequestHeaders::parse(
@@ -172,6 +266,15 @@ mod tests {
         );
     }
 
+    /// Signature: `fn rejects_header_without_a_colon()`
+    ///
+    /// Purpose: Ensures malformed header CLI values are rejected.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: The scanner requires the exact `Name: value` shape.
     #[test]
     fn rejects_header_without_a_colon() {
         let error = RequestHeaders::parse(&["Authorization token".to_owned()], None)
@@ -180,6 +283,16 @@ mod tests {
         assert!(error.to_string().contains("Name: value"));
     }
 
+    /// Signature: `fn omits_sensitive_headers_after_cross_authority_redirect()`
+    ///
+    /// Purpose: Verifies static sensitive headers are dropped after a
+    /// cross-authority redirect.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Non-sensitive headers should still be preserved.
     #[test]
     fn omits_sensitive_headers_after_cross_authority_redirect() {
         let headers = RequestHeaders::parse(
@@ -206,6 +319,16 @@ mod tests {
         assert_eq!(request.headers().get("x-trace").expect("trace"), "safe");
     }
 
+    /// Signature: `fn replaces_token_in_header_values_for_each_candidate()`
+    ///
+    /// Purpose: Verifies token replacement in header names and values.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: This test covers per-candidate rendering rather than parse-time
+    /// substitution.
     #[test]
     fn replaces_token_in_header_values_for_each_candidate() {
         let headers = RequestHeaders::parse(
@@ -233,6 +356,17 @@ mod tests {
         );
     }
 
+    /// Signature: `fn omits_dynamically_named_sensitive_headers_after_cross_authority_redirect()`
+    ///
+    /// Purpose: Verifies dynamically rendered sensitive header names are also
+    /// filtered after cross-authority redirects.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: The check happens after rendering so replacement-generated names
+    /// receive the same protection as literal names.
     #[test]
     fn omits_dynamically_named_sensitive_headers_after_cross_authority_redirect() {
         let headers = RequestHeaders::parse(&["ENUM: secret".to_owned()], Some("ENUM"))

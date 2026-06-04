@@ -12,6 +12,23 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
 use super::{Candidate, UrlGenerator};
 
+/// Signature: `fn candidate_stream(file, generator, extensions) -> impl Stream<Item = Result<Candidate>>`
+///
+/// Purpose: Lazily reads a dictionary and emits deduplicated candidates for a
+/// single target URL generator.
+///
+/// Parameters:
+/// - `file`: Open dictionary file to read line by line.
+/// - `generator`: URL generator used to render each expanded dictionary word.
+/// - `extensions`: Normalized extension suffixes to append to each word.
+///
+/// Returns: A stream of [`Candidate`] values wrapped in [`Result`].
+///
+/// Errors: Stream items fail if the dictionary cannot be read or a word cannot
+/// be rendered into a valid URL.
+///
+/// Notes: Deduplication is scoped to this dictionary pass so repeated words and
+/// repeated extension expansions are emitted only once for the target.
 pub(super) fn candidate_stream(
     file: File,
     generator: Arc<UrlGenerator>,
@@ -39,6 +56,25 @@ pub(super) fn candidate_stream(
     }
 }
 
+/// Signature: `fn target_dictionary_stream(first_file, dictionary_path, output, generators, extensions) -> impl Stream<Item = Result<Candidate>>`
+///
+/// Purpose: Streams candidates for multiple targets in target-major order while
+/// rereading the dictionary once per target.
+///
+/// Parameters:
+/// - `first_file`: Already opened dictionary handle for the first target.
+/// - `dictionary_path`: Path used to reopen the dictionary for later targets.
+/// - `output`: Optional output path used to prevent dictionary overwrite.
+/// - `generators`: Ordered URL generators, one per target.
+/// - `extensions`: Normalized extension suffixes to append to each word.
+///
+/// Returns: A stream of [`Candidate`] values wrapped in [`Result`].
+///
+/// Errors: Stream items fail if the dictionary cannot be reopened or read, if
+/// the output path aliases the dictionary, or if URL generation fails.
+///
+/// Notes: Keeping the dictionary on disk avoids loading large wordlists when the
+/// caller does not request randomized sequencing.
 pub(super) fn target_dictionary_stream(
     first_file: File,
     dictionary_path: PathBuf,
@@ -76,6 +112,22 @@ pub(super) fn target_dictionary_stream(
     }
 }
 
+/// Signature: `async fn read_dictionary_words(file, extensions) -> Result<Vec<String>>`
+///
+/// Purpose: Reads the full dictionary into a deduplicated, extension-expanded
+/// word list.
+///
+/// Parameters:
+/// - `file`: Open dictionary file to read line by line.
+/// - `extensions`: Normalized extension suffixes to append to each word.
+///
+/// Returns: A vector containing each base word and extension variant in input
+/// order, with duplicates removed.
+///
+/// Errors: Returns an error when the dictionary cannot be read.
+///
+/// Notes: This is used by randomized sequencing, which needs the complete
+/// target-by-word product before shuffling.
 pub(super) async fn read_dictionary_words(
     file: File,
     extensions: &[String],
@@ -103,6 +155,23 @@ pub(super) async fn read_dictionary_words(
     Ok(words)
 }
 
+/// Signature: `fn target_word_stream(generators, words, random_sequence) -> impl Stream<Item = Result<Candidate>>`
+///
+/// Purpose: Emits candidates from preloaded words across all targets, optionally
+/// shuffling the full target-word product.
+///
+/// Parameters:
+/// - `generators`: Ordered URL generators, one per target.
+/// - `words`: Deduplicated dictionary words and extension variants.
+/// - `random_sequence`: Whether to shuffle the full request sequence.
+///
+/// Returns: A stream of [`Candidate`] values wrapped in [`Result`].
+///
+/// Errors: Stream items fail if the target-word product overflows `usize` or if
+/// URL generation fails.
+///
+/// Notes: Non-random mode preserves target-major order to match the streaming
+/// dictionary path.
 pub(super) fn target_word_stream(
     generators: Arc<[UrlGenerator]>,
     words: Arc<[String]>,
@@ -132,6 +201,22 @@ pub(super) fn target_word_stream(
     }
 }
 
+/// Signature: `async fn open_dictionary(path, output) -> Result<File>`
+///
+/// Purpose: Opens a dictionary file and guards against writing scanner output
+/// to the same filesystem object.
+///
+/// Parameters:
+/// - `path`: Dictionary file path.
+/// - `output`: Optional output file path supplied by the user.
+///
+/// Returns: An open Tokio [`File`] for the dictionary.
+///
+/// Errors: Returns an error if the dictionary cannot be opened, if the output
+/// file is the same as the dictionary, or if same-file detection fails for an
+/// existing output path.
+///
+/// Notes: The same-file check catches hard links as well as identical paths.
 pub(super) async fn open_dictionary(path: &Path, output: Option<&str>) -> Result<File> {
     let file = File::open(path)
         .await
@@ -152,6 +237,22 @@ pub(super) async fn open_dictionary(path: &Path, output: Option<&str>) -> Result
     Ok(file)
 }
 
+/// Signature: `async fn read_targets(value) -> Result<Vec<String>>`
+///
+/// Purpose: Resolves the target argument into one or more target URL strings.
+///
+/// Parameters:
+/// - `value`: A target URL, a target-list file path, or `-` to read a single
+///   target from standard input.
+///
+/// Returns: A non-empty vector of target strings.
+///
+/// Errors: Returns an error when stdin provides zero or multiple targets, a
+/// target-list path is a directory, a target-list file is empty or unreadable,
+/// or filesystem inspection fails for a supplied path.
+///
+/// Notes: A nonexistent path is treated as a literal target URL so ordinary URL
+/// strings do not require disambiguation.
 pub(super) async fn read_targets(value: &str) -> Result<Vec<String>> {
     if value == "-" {
         let mut input = String::new();
@@ -192,6 +293,19 @@ pub(super) async fn read_targets(value: &str) -> Result<Vec<String>> {
     }
 }
 
+/// Signature: `fn normalize_extensions(extensions) -> Vec<String>`
+///
+/// Purpose: Normalizes user-provided extension suffixes before dictionary
+/// expansion.
+///
+/// Parameters:
+/// - `extensions`: Raw extension strings from CLI parsing.
+///
+/// Returns: Trimmed extensions without leading dots, preserving first-seen
+/// order and removing empty or duplicate values.
+///
+/// Notes: Returned values do not include the separator dot; expansion adds it
+/// when building candidate words.
 pub(super) fn normalize_extensions(extensions: &[String]) -> Vec<String> {
     let mut seen = HashSet::with_capacity(extensions.len());
     let mut normalized = Vec::with_capacity(extensions.len());
@@ -204,6 +318,17 @@ pub(super) fn normalize_extensions(extensions: &[String]) -> Vec<String> {
     normalized
 }
 
+/// Signature: `fn parse_target_lines(input) -> Vec<String>`
+///
+/// Purpose: Extracts target entries from raw target-list text.
+///
+/// Parameters:
+/// - `input`: Raw text read from stdin or a target-list file.
+///
+/// Returns: Trimmed, non-empty target strings in original order.
+///
+/// Notes: This function performs only line cleanup; URL validation happens when
+/// constructing [`UrlGenerator`] values.
 fn parse_target_lines(input: &str) -> Vec<String> {
     input
         .lines()
@@ -213,6 +338,20 @@ fn parse_target_lines(input: &str) -> Vec<String> {
         .collect()
 }
 
+/// Signature: `fn target_word_indices(target_count, word_count) -> Result<Vec<(usize, usize)>>`
+///
+/// Purpose: Builds the Cartesian product of target and word indexes.
+///
+/// Parameters:
+/// - `target_count`: Number of target generators.
+/// - `word_count`: Number of expanded dictionary words.
+///
+/// Returns: Target-major `(target_index, word_index)` pairs.
+///
+/// Errors: Returns an error if `target_count * word_count` overflows `usize`.
+///
+/// Notes: The caller may shuffle the returned vector to randomize the request
+/// sequence without losing any target-word pair.
 fn target_word_indices(target_count: usize, word_count: usize) -> Result<Vec<(usize, usize)>> {
     let total = target_count
         .checked_mul(word_count)
@@ -228,6 +367,18 @@ fn target_word_indices(target_count: usize, word_count: usize) -> Result<Vec<(us
     Ok(indices)
 }
 
+/// Signature: `fn expanded_words(word, extensions) -> impl Iterator<Item = String>`
+///
+/// Purpose: Produces a base dictionary word followed by extension variants.
+///
+/// Parameters:
+/// - `word`: Trimmed dictionary word.
+/// - `extensions`: Normalized extension suffixes without leading dots.
+///
+/// Returns: An iterator yielding owned candidate words.
+///
+/// Notes: The base word is always yielded first so extension expansion preserves
+/// user-visible dictionary ordering.
 fn expanded_words<'a>(
     word: &'a str,
     extensions: &'a [String],
@@ -250,6 +401,16 @@ mod tests {
 
     use super::*;
 
+    /// Signature: `fn expands_extensions_without_leading_dots()`
+    ///
+    /// Purpose: Verifies extension normalization integrates with word expansion.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Extension variants are expected to include exactly one separator
+    /// dot in the expanded word.
     #[test]
     fn expands_extensions_without_leading_dots() {
         let extensions = normalize_extensions(&[".php".to_owned(), "bak".to_owned()]);
@@ -260,6 +421,16 @@ mod tests {
         assert!(words.contains(&"admin.bak".to_owned()));
     }
 
+    /// Signature: `fn extension_expansion_preserves_argument_order_and_discards_duplicates()`
+    ///
+    /// Purpose: Verifies extension normalization preserves first-seen order while
+    /// removing duplicates.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Whitespace and leading dots are normalized before deduplication.
     #[test]
     fn extension_expansion_preserves_argument_order_and_discards_duplicates() {
         let extensions = normalize_extensions(&[
@@ -272,6 +443,16 @@ mod tests {
         assert_eq!(extensions, vec!["bak", "php", "txt"]);
     }
 
+    /// Signature: `async fn refuses_to_overwrite_dictionary_through_a_hard_link()`
+    ///
+    /// Purpose: Verifies dictionary/output alias detection catches hard links.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: This protects users even when paths differ but point to the same
+    /// filesystem object.
     #[tokio::test]
     async fn refuses_to_overwrite_dictionary_through_a_hard_link() {
         let directory = std::env::temp_dir().join(format!(
@@ -293,6 +474,15 @@ mod tests {
         std::fs::remove_dir_all(directory).expect("remove temporary test directory");
     }
 
+    /// Signature: `fn parses_target_lines_and_ignores_blank_lines()`
+    ///
+    /// Purpose: Verifies target-list parsing trims whitespace and skips blanks.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: URL validation is intentionally outside this helper.
     #[test]
     fn parses_target_lines_and_ignores_blank_lines() {
         let targets = parse_target_lines("\n https://one.test \n\nhttps://two.test\n");
@@ -300,6 +490,15 @@ mod tests {
         assert_eq!(targets, vec!["https://one.test", "https://two.test"]);
     }
 
+    /// Signature: `fn creates_target_word_indices_in_target_major_order()`
+    ///
+    /// Purpose: Verifies Cartesian target-word indexes use target-major order.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: The order matches default non-random scanner output ordering.
     #[test]
     fn creates_target_word_indices_in_target_major_order() {
         let indices = target_word_indices(2, 3).expect("valid sequence");
@@ -310,6 +509,15 @@ mod tests {
         );
     }
 
+    /// Signature: `fn shuffles_target_word_indices_as_the_full_product()`
+    ///
+    /// Purpose: Verifies shuffled sequencing keeps every target-word pair.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Sorting after shuffle should recover the ordered product exactly.
     #[test]
     fn shuffles_target_word_indices_as_the_full_product() {
         let mut indices = target_word_indices(2, 3).expect("valid sequence");
@@ -321,6 +529,17 @@ mod tests {
         assert_eq!(indices, ordered);
     }
 
+    /// Signature: `async fn target_word_stream_uses_target_major_order_by_default()`
+    ///
+    /// Purpose: Verifies non-random preloaded word streams preserve
+    /// target-major ordering.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: This keeps randomized and streaming paths behaviorally aligned
+    /// when randomization is disabled.
     #[tokio::test]
     async fn target_word_stream_uses_target_major_order_by_default() {
         let generators = Arc::from(

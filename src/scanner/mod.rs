@@ -28,12 +28,14 @@ use pacing::RequestPacing;
 use probe::probe;
 use url_generator::UrlGenerator;
 
+/// Fully rendered word and URL pair ready to be probed.
 #[derive(Debug)]
 pub(super) struct Candidate {
     pub(super) word: String,
     pub(super) url: Url,
 }
 
+/// Serializable result emitted for one attempted URL probe.
 #[derive(Debug, Serialize)]
 pub(super) struct ProbeResult {
     pub(super) word: String,
@@ -44,6 +46,27 @@ pub(super) struct ProbeResult {
     pub(super) error: Option<String>,
 }
 
+/// Signature: `pub async fn run(args: Args) -> Result<()>`
+///
+/// Purpose: Validates scanner settings, builds shared scanner components,
+/// streams candidates, executes probes concurrently, and writes accepted
+/// results.
+///
+/// Parameters:
+/// - `args`: Parsed CLI options controlling targets, dictionary, headers,
+///   filters, request behavior, and output destination.
+///
+/// Returns: `Ok(())` after all candidate URLs have been processed and output has
+/// been flushed.
+///
+/// Errors: Returns an error when arguments are invalid, input files cannot be
+/// read, target or header templates cannot be parsed, HTTP client construction
+/// fails, probing fails before it can be represented as a result, or output
+/// writing fails.
+///
+/// Notes: Candidate streams are selected to preserve target-major ordering by
+/// default while avoiding loading the dictionary into memory unless randomized
+/// sequencing requires the complete product.
 pub async fn run(args: Args) -> Result<()> {
     if args.concurrency == 0 {
         bail!("concurrency must be greater than 0");

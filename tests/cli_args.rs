@@ -1,6 +1,15 @@
 use clap::Parser;
 use url_enum::cli::Args;
 
+/// Signature: `fn parses_request_jitter_milliseconds()`
+///
+/// Purpose: Verifies the CLI accepts millisecond request jitter values.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Keeps argument parsing coverage close to the public CLI surface.
 #[test]
 fn parses_request_jitter_milliseconds() {
     let args = Args::try_parse_from([
@@ -17,6 +26,16 @@ fn parses_request_jitter_milliseconds() {
     assert_eq!(args.request_jitter_ms, 250);
 }
 
+/// Signature: `fn parses_random_sequence_flag()`
+///
+/// Purpose: Verifies the random sequencing flag is parsed as a boolean switch.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: The scanner uses this flag to choose between streaming and preloaded
+/// dictionary modes.
 #[test]
 fn parses_random_sequence_flag() {
     let args = Args::try_parse_from([
@@ -32,6 +51,16 @@ fn parses_random_sequence_flag() {
     assert!(args.random_sequence);
 }
 
+/// Signature: `fn rejects_removed_proxy_short_and_credentials_options()`
+///
+/// Purpose: Verifies removed proxy-related CLI options are no longer accepted.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Proxy credentials should be embedded in the proxy URL instead of
+/// passed through separate flags.
 #[test]
 fn rejects_removed_proxy_short_and_credentials_options() {
     let short_proxy = Args::try_parse_from([

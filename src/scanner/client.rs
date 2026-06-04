@@ -6,6 +6,21 @@ use url::Url;
 
 use crate::cli::{Args, HttpMethod};
 
+/// Signature: `fn build_client(args) -> Result<Client>`
+///
+/// Purpose: Constructs the shared reqwest client used for scanner probes.
+///
+/// Parameters:
+/// - `args`: Parsed CLI settings for timeout, proxy, TLS, user agent, and
+///   connection pooling.
+///
+/// Returns: A configured [`Client`] with automatic redirects disabled.
+///
+/// Errors: Returns an error if proxy parsing or reqwest client construction
+/// fails.
+///
+/// Notes: Redirects are handled manually by `probe` so every response in a
+/// redirect chain can be filtered and emitted.
 pub(super) fn build_client(args: &Args) -> Result<Client> {
     let mut builder = Client::builder()
         // Redirects are handled by `probe` so each received response can be emitted.
@@ -22,6 +37,19 @@ pub(super) fn build_client(args: &Args) -> Result<Client> {
     builder.build().context("failed to create HTTP client")
 }
 
+/// Signature: `fn build_proxy(args) -> Result<Option<Proxy>>`
+///
+/// Purpose: Parses and validates the optional proxy URL from CLI arguments.
+///
+/// Parameters:
+/// - `args`: Parsed CLI settings containing the optional proxy URL.
+///
+/// Returns: `Ok(Some(proxy))` when a proxy is configured, otherwise `Ok(None)`.
+///
+/// Errors: Returns an error if the proxy URL is malformed, uses an unsupported
+/// scheme, lacks a host, or cannot be converted into a reqwest proxy.
+///
+/// Notes: Credentials are expected to be embedded in the proxy URL when needed.
 fn build_proxy(args: &Args) -> Result<Option<Proxy>> {
     let Some(value) = args.proxy.as_deref() else {
         return Ok(None);
@@ -38,6 +66,16 @@ fn build_proxy(args: &Args) -> Result<Option<Proxy>> {
     Ok(Some(proxy))
 }
 
+/// Signature: `fn method_for(method) -> Method`
+///
+/// Purpose: Converts CLI method choices into reqwest HTTP methods.
+///
+/// Parameters:
+/// - `method`: Parsed CLI method enum.
+///
+/// Returns: The corresponding reqwest [`Method`].
+///
+/// Notes: Update this match whenever [`HttpMethod`] gains a new variant.
 pub(super) fn method_for(method: HttpMethod) -> Method {
     match method {
         HttpMethod::Get => Method::GET,
@@ -51,6 +89,17 @@ mod tests {
 
     use super::*;
 
+    /// Signature: `fn accepts_supported_proxy_urls_with_embedded_credentials()`
+    ///
+    /// Purpose: Verifies supported proxy schemes and embedded credentials parse
+    /// into reqwest proxies.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Keeps CLI-level acceptance separate from scanner-level proxy URL
+    /// validation.
     #[test]
     fn accepts_supported_proxy_urls_with_embedded_credentials() {
         for proxy_url in [
@@ -74,6 +123,17 @@ mod tests {
         }
     }
 
+    /// Signature: `fn rejects_unsupported_proxy_protocol()`
+    ///
+    /// Purpose: Ensures unsupported proxy schemes fail during scanner
+    /// validation.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: Clap intentionally accepts the string so scanner validation can
+    /// produce a domain-specific error.
     #[test]
     fn rejects_unsupported_proxy_protocol() {
         let unsupported = Args::try_parse_from([

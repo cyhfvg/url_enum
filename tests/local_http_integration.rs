@@ -24,6 +24,16 @@ struct LocalHttpServer {
 }
 
 impl LocalHttpServer {
+    /// Signature: `fn start() -> Self`
+    ///
+    /// Purpose: Starts a lightweight local HTTP server for integration tests.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: A [`LocalHttpServer`] handle that owns the listener thread and
+    /// request log.
+    ///
+    /// Notes: The server binds to an ephemeral loopback port to avoid collisions.
     fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind local HTTP server");
         let address = listener.local_addr().expect("read local HTTP address");
@@ -54,16 +64,44 @@ impl LocalHttpServer {
         }
     }
 
+    /// Signature: `fn target(&self) -> String`
+    ///
+    /// Purpose: Builds the base HTTP target URL for the test server.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: A string in `http://host:port` form.
+    ///
+    /// Notes: Tests append paths or tokens to this base target.
     fn target(&self) -> String {
         format!("http://{}", self.address)
     }
 
+    /// Signature: `fn requests(&self) -> Vec<RequestLog>`
+    ///
+    /// Purpose: Returns the requests observed by the local test server.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: A cloned vector of recorded request method/path pairs.
+    ///
+    /// Notes: Cloning avoids holding the mutex while assertions inspect data.
     fn requests(&self) -> Vec<RequestLog> {
         self.requests.lock().expect("request log lock").to_owned()
     }
 }
 
 impl Drop for LocalHttpServer {
+    /// Signature: `fn drop(&mut self)`
+    ///
+    /// Purpose: Stops the local HTTP server and joins its listener thread.
+    ///
+    /// Parameters: None beyond the mutable server handle being dropped.
+    ///
+    /// Returns: Nothing.
+    ///
+    /// Notes: A loopback connection wakes the blocking `incoming` iterator so
+    /// shutdown does not hang the test process.
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         let _ = TcpStream::connect(self.address);
@@ -89,6 +127,19 @@ struct ResponseSpec {
     delay: Duration,
 }
 
+/// Signature: `fn handle_connection(stream, requests)`
+///
+/// Purpose: Reads one HTTP request, records it, and writes a deterministic test
+/// response.
+///
+/// Parameters:
+/// - `stream`: Accepted TCP connection from the local server.
+/// - `requests`: Shared request log for assertions.
+///
+/// Returns: Nothing.
+///
+/// Notes: The parser is intentionally minimal because tests only need method
+/// and path from simple HTTP/1.1 requests.
 fn handle_connection(mut stream: TcpStream, requests: Arc<Mutex<Vec<RequestLog>>>) {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
@@ -133,6 +184,16 @@ fn handle_connection(mut stream: TcpStream, requests: Arc<Mutex<Vec<RequestLog>>
     let _ = stream.write_all(&response.body);
 }
 
+/// Signature: `fn header_end_position(bytes) -> Option<usize>`
+///
+/// Purpose: Locates the end of an HTTP header block in a byte buffer.
+///
+/// Parameters:
+/// - `bytes`: Pending bytes read from a TCP stream.
+///
+/// Returns: The byte index immediately after `\r\n\r\n`, if present.
+///
+/// Notes: The body is not parsed because test requests do not send one.
 fn header_end_position(bytes: &[u8]) -> Option<usize> {
     bytes
         .windows(4)
@@ -140,6 +201,18 @@ fn header_end_position(bytes: &[u8]) -> Option<usize> {
         .map(|position| position + 4)
 }
 
+/// Signature: `fn response_for(method, path) -> ResponseSpec`
+///
+/// Purpose: Maps a test request to the response scenario needed by assertions.
+///
+/// Parameters:
+/// - `method`: Request method from the HTTP request line.
+/// - `path`: Request path from the HTTP request line.
+///
+/// Returns: A [`ResponseSpec`] containing status, content length, body, and
+/// optional delay.
+///
+/// Notes: Unknown paths deliberately return `404 Not Found`.
 fn response_for(method: &str, path: &str) -> ResponseSpec {
     match (method, path) {
         (_, "/status-ok") => response("200 OK", b"status-ok".to_vec()),
@@ -167,6 +240,18 @@ fn response_for(method: &str, path: &str) -> ResponseSpec {
     }
 }
 
+/// Signature: `fn response(status, body) -> ResponseSpec`
+///
+/// Purpose: Builds a simple immediate response specification.
+///
+/// Parameters:
+/// - `status`: HTTP status text, for example `200 OK`.
+/// - `body`: Response body bytes.
+///
+/// Returns: A [`ResponseSpec`] with content length derived from `body`.
+///
+/// Notes: Delayed or bodyless responses are constructed inline by tests that
+/// need those details.
 fn response(status: &'static str, body: Vec<u8>) -> ResponseSpec {
     ResponseSpec {
         status,
@@ -176,6 +261,21 @@ fn response(status: &'static str, body: Vec<u8>) -> ResponseSpec {
     }
 }
 
+/// Signature: `fn args_for(target, dictionary, output, method, timeout) -> Args`
+///
+/// Purpose: Creates scanner arguments with integration-test defaults.
+///
+/// Parameters:
+/// - `target`: Target URL or target-list path for the run.
+/// - `dictionary`: Path to the temporary dictionary file.
+/// - `output`: Path where scanner results should be written.
+/// - `method`: HTTP method to configure.
+/// - `timeout`: Request timeout in seconds.
+///
+/// Returns: A complete [`Args`] value ready for test-specific mutation.
+///
+/// Notes: Defaults favor deterministic output and low concurrency for stable
+/// assertions unless a test overrides them.
 fn args_for(
     target: String,
     dictionary: &Path,
@@ -206,6 +306,19 @@ fn args_for(
     }
 }
 
+/// Signature: `fn run_with_words(words, configure) -> (LocalHttpServer, Vec<TestResult>)`
+///
+/// Purpose: Runs the scanner against the local server using a temporary
+/// dictionary.
+///
+/// Parameters:
+/// - `words`: Dictionary entries to write.
+/// - `configure`: Callback that mutates default scanner arguments.
+///
+/// Returns: The running server handle and parsed JSONL results.
+///
+/// Notes: Returning the server keeps it alive long enough for callers to inspect
+/// request logs.
 fn run_with_words<F>(words: &[&str], configure: F) -> (LocalHttpServer, Vec<TestResult>)
 where
     F: FnOnce(&mut Args),
@@ -228,6 +341,17 @@ where
     (server, results)
 }
 
+/// Signature: `fn read_results(path) -> Vec<TestResult>`
+///
+/// Purpose: Reads scanner JSONL output into strongly typed test results.
+///
+/// Parameters:
+/// - `path`: Output file produced by the scanner.
+///
+/// Returns: Parsed [`TestResult`] values in file order.
+///
+/// Notes: Integration tests use JSONL output because it is easy to parse line by
+/// line.
 fn read_results(path: &Path) -> Vec<TestResult> {
     let contents = std::fs::read_to_string(path).expect("read JSONL output");
     contents
@@ -236,6 +360,20 @@ fn read_results(path: &Path) -> Vec<TestResult> {
         .collect()
 }
 
+/// Signature: `fn result_for(results, word) -> &TestResult`
+///
+/// Purpose: Finds the result associated with a dictionary word.
+///
+/// Parameters:
+/// - `results`: Parsed scanner results.
+/// - `word`: Dictionary word to search for.
+///
+/// Returns: A borrowed [`TestResult`] for the requested word.
+///
+/// Panics: Panics when the expected word is missing from results.
+///
+/// Notes: The panic message includes the missing word to simplify failed test
+/// diagnosis.
 fn result_for<'a>(results: &'a [TestResult], word: &str) -> &'a TestResult {
     results
         .iter()
@@ -243,6 +381,15 @@ fn result_for<'a>(results: &'a [TestResult], word: &str) -> &'a TestResult {
         .unwrap_or_else(|| panic!("missing result for word `{word}`"))
 }
 
+/// Signature: `fn scans_each_target_from_an_existing_target_list_file()`
+///
+/// Purpose: Verifies target-list files are scanned in target-major order.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Concurrency is set to one so output order remains deterministic.
 #[test]
 fn scans_each_target_from_an_existing_target_list_file() {
     let server = LocalHttpServer::start();
@@ -286,6 +433,16 @@ fn scans_each_target_from_an_existing_target_list_file() {
     );
 }
 
+/// Signature: `fn replaces_token_inside_targets_from_a_target_list_file()`
+///
+/// Purpose: Verifies token replacement is applied independently to each target
+/// loaded from a target-list file.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Concurrency is set to one so replacement output order is deterministic.
 #[test]
 fn replaces_token_inside_targets_from_a_target_list_file() {
     let server = LocalHttpServer::start();
@@ -330,6 +487,15 @@ fn replaces_token_inside_targets_from_a_target_list_file() {
     );
 }
 
+/// Signature: `fn filters_status_codes_with_allowlist_and_blocklist()`
+///
+/// Purpose: Verifies status allowlist and blocklist filters compose correctly.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Blocklist entries take precedence after allowlist matching.
 #[test]
 fn filters_status_codes_with_allowlist_and_blocklist() {
     let (_server, results) = run_with_words(
@@ -346,6 +512,16 @@ fn filters_status_codes_with_allowlist_and_blocklist() {
     assert_eq!(result.error, None);
 }
 
+/// Signature: `fn filters_response_sizes_with_exact_values_and_ranges()`
+///
+/// Purpose: Verifies exact and ranged response-size filters remove matching
+/// results.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Remaining responses should be successful and unfiltered.
 #[test]
 fn filters_response_sizes_with_exact_values_and_ranges() {
     let (_server, results) = run_with_words(
@@ -361,6 +537,15 @@ fn filters_response_sizes_with_exact_values_and_ranges() {
     assert!(results.iter().all(|result| result.error.is_none()));
 }
 
+/// Signature: `fn records_request_timeout_as_a_failed_probe()`
+///
+/// Purpose: Verifies request timeouts are emitted as failed probe results.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: Failures are emitted because no status allowlist is configured.
 #[test]
 fn records_request_timeout_as_a_failed_probe() {
     let (_server, results) = run_with_words(&["slow", "fast"], |args| {
@@ -376,6 +561,16 @@ fn records_request_timeout_as_a_failed_probe() {
     assert_eq!(fast.size, Some(4));
 }
 
+/// Signature: `fn sends_head_requests_and_uses_content_length_as_size()`
+///
+/// Purpose: Verifies `HEAD` mode sends HEAD requests and reports size from
+/// `Content-Length`.
+///
+/// Parameters: None.
+///
+/// Returns: Nothing; assertions define success.
+///
+/// Notes: The request log confirms the scanner did not fall back to `GET`.
 #[test]
 fn sends_head_requests_and_uses_content_length_as_size() {
     let (server, results) = run_with_words(&["head-target"], |args| {

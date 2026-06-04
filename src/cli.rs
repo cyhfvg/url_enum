@@ -1,17 +1,52 @@
 use clap::{ArgAction, Parser, ValueEnum};
 
+/// HTTP method used for each probe request.
+///
+/// Signature: `enum HttpMethod`
+///
+/// Purpose: Provides clap-compatible choices for request methods supported by
+/// the scanner.
+///
+/// Parameters: Not applicable.
+///
+/// Returns: Not applicable.
+///
+/// Notes: Keep this enum aligned with `scanner::client::method_for`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum HttpMethod {
     Get,
     Head,
 }
 
+/// Output serialization format for scan results.
+///
+/// Signature: `enum OutputFormat`
+///
+/// Purpose: Provides clap-compatible choices for result writers.
+///
+/// Parameters: Not applicable.
+///
+/// Returns: Not applicable.
+///
+/// Notes: Keep this enum aligned with `scanner::output::ResultWriter`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
     Csv,
     Jsonl,
 }
 
+/// Parsed command-line configuration for one scanner invocation.
+///
+/// Signature: `struct Args`
+///
+/// Purpose: Defines all user-facing CLI flags and their clap parsing metadata.
+///
+/// Parameters: Not applicable.
+///
+/// Returns: Not applicable.
+///
+/// Notes: Field comments double as clap help text, so keep them concise and
+/// user-facing.
 #[derive(Debug, Parser)]
 #[command(
     name = "url_enum",
