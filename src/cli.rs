@@ -52,7 +52,15 @@ pub enum OutputFormat {
     name = "url_enum",
     version,
     about = "Enumerate paths for target URLs (authorized targets only)",
-    long_about = "Enumerate paths for target URLs.\n\nSecurity notice: Run this tool only against systems you own or are explicitly authorized to test."
+    long_about = "Enumerate paths for target URLs.\n\nSecurity notice: Run this tool only against systems you own or are explicitly authorized to test.",
+    after_help = "Examples:
+  url_enum -t https://example.test -d words.txt
+  url_enum -t targets.txt -d words.txt --concurrency 20
+  url_enum -t https://example.test/ENUM -d words.txt -r ENUM
+  url_enum -t https://example.test -d words.txt --extensions php,bak,txt
+  url_enum -t https://example.test -d words.txt --format jsonl -o results.jsonl
+
+Repository: https://github.com/cyhfvg/url_enum"
 )]
 pub struct Args {
     /// Target URL, target-list file, or `-` to read one URL from stdin
