@@ -268,6 +268,10 @@ pub(super) async fn read_targets(value: &str) -> Result<Vec<String>> {
         };
     }
 
+    if is_http_url_literal(value) {
+        return Ok(vec![value.to_owned()]);
+    }
+
     let path = Path::new(value);
     match tokio::fs::metadata(path).await {
         Ok(metadata) => {
@@ -291,6 +295,28 @@ pub(super) async fn read_targets(value: &str) -> Result<Vec<String>> {
             Err(error).with_context(|| format!("failed to inspect target `{}`", path.display()))
         }
     }
+}
+
+/// Signature: `fn is_http_url_literal(value) -> bool`
+///
+/// Purpose: Identifies target arguments that should be treated as URL text
+/// without probing the filesystem first.
+///
+/// Parameters:
+/// - `value`: Raw target argument.
+///
+/// Returns: `true` for HTTP(S) URL-looking input.
+///
+/// Notes: Windows rejects URL strings such as `https://host:443` as invalid
+/// path syntax during metadata lookup, so URL detection must happen first.
+fn is_http_url_literal(value: &str) -> bool {
+    let value = value.trim_start();
+    value
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+        || value
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
 }
 
 /// Signature: `fn normalize_extensions(extensions) -> Vec<String>`
@@ -488,6 +514,43 @@ mod tests {
         let targets = parse_target_lines("\n https://one.test \n\nhttps://two.test\n");
 
         assert_eq!(targets, vec!["https://one.test", "https://two.test"]);
+    }
+
+    /// Signature: `async fn reads_single_http_url_target_as_literal_url()`
+    ///
+    /// Purpose: Verifies single URL targets are not inspected as filesystem
+    /// paths before URL validation.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: This covers Windows paths where `https://host:443` triggers an
+    /// invalid path syntax error if passed to metadata lookup.
+    #[tokio::test]
+    async fn reads_single_http_url_target_as_literal_url() {
+        let target = "https://token.telecomjs.com:443";
+
+        let targets = read_targets(target).await.expect("literal URL target");
+
+        assert_eq!(targets, vec![target]);
+    }
+
+    /// Signature: `fn recognizes_http_url_literals_case_insensitively()`
+    ///
+    /// Purpose: Verifies URL-looking targets are detected before filesystem
+    /// inspection.
+    ///
+    /// Parameters: None.
+    ///
+    /// Returns: Nothing; assertions define success.
+    ///
+    /// Notes: URL schemes are case-insensitive.
+    #[test]
+    fn recognizes_http_url_literals_case_insensitively() {
+        assert!(is_http_url_literal("http://example.test"));
+        assert!(is_http_url_literal("HTTPS://example.test"));
+        assert!(!is_http_url_literal("targets.txt"));
     }
 
     /// Signature: `fn creates_target_word_indices_in_target_major_order()`
